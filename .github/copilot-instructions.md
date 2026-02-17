@@ -1,0 +1,260 @@
+# 🤖 COPILOT AUTO-UPDATE RULE
+
+**Copilot MUST update this file automatically when ANY of the following happens:**
+
+1. **User defines or changes** project domain, stack, database, or scale → Update 🎯 PROJECT IDENTITY
+2. **User starts a new task** or completes one → Update 🚧 CURRENT FOCUS and ✅ COMPLETED WORK
+3. **User makes architectural decisions** → Update 📋 IMPORTANT CONTEXT and 🏗 PATTERNS TO USE
+4. **User adds explicit instructions** (e.g., "always do X", "use Y for Z") → Add to 📜 USER INSTRUCTIONS LOG
+5. **User provides credentials or config names** → Add NAME ONLY to 🔐 CREDENTIALS & CONFIG (⚠️ NEVER store values!)
+6. **User says "don't do X"** or prohibits something → Add to 🚫 USER SAID "DON'T DO THIS"
+7. **User shares important context** (business rules, constraints, domain knowledge) → Add to 📋 IMPORTANT CONTEXT
+
+**After updating, briefly confirm what was changed at the end of the response.**
+
+---
+
+## 🎯 PROJECT IDENTITY
+
+| Field        | Value                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| **Name**     | AI Benchmarker                                                                                         |
+| **Domain**   | AI model verification & benchmarking — detect model fraud (e.g., resold APIs misrepresenting identity) |
+| **Stack**    | Python 3.12+ · FastAPI · Pydantic v2 · httpx (async) · SQLAlchemy 2.0 (async) · Alembic                |
+| **Database** | SQLite (dev & prod — file-based, zero-config)                                                          |
+| **Scale**    | Single-node CLI + web dashboard · benchmarks run locally or via CI                                     |
+| **Repo**     | `benchmark/`                                                                                           |
+
+---
+
+## 📜 USER INSTRUCTIONS LOG
+
+| #   | Date       | Instruction                                      |
+| --- | ---------- | ------------------------------------------------ |
+| 1   | 2026-02-17 | Project bootstrapped with Copilot context system |
+|     |            |                                                  |
+
+---
+
+## ✅ COMPLETED WORK
+
+| #   | Date       | Task                                                     |
+| --- | ---------- | -------------------------------------------------------- |
+| 1   | 2026-02-17 | Project bootstrap — copilot context, settings, gitignore |
+|     |            |                                                          |
+
+---
+
+## 🚧 CURRENT FOCUS
+
+| Item           | Detail                                  |
+| -------------- | --------------------------------------- |
+| **Working on** | Project scaffolding & initial structure |
+| **Blockers**   | None                                    |
+| **Next up**    | Core benchmark runner & model adapters  |
+
+---
+
+## 🔐 CREDENTIALS & CONFIG
+
+> ⚠️ **NEVER store actual values here — names/keys only!**
+
+| #   | Name | Service | Notes |
+| --- | ---- | ------- | ----- |
+|     |      |         |       |
+
+---
+
+## 🚫 USER SAID "DON'T DO THIS"
+
+| #   | Date | Prohibition |
+| --- | ---- | ----------- |
+|     |      |             |
+
+---
+
+## 📋 IMPORTANT CONTEXT
+
+- **Core Problem:** Users are being sold API access to models misrepresented as premium models (e.g., Kimi sold as Claude). The system prompt says "Claude" but the underlying model is actually Kimi.
+- **Goal:** Build a benchmark suite that can fingerprint AI model behavior to verify true model identity, comparing response patterns, capabilities, and quirks across models.
+- **Key Features Planned:**
+  - Run standardized prompt suites against multiple API endpoints
+  - Collect and store structured benchmark results (latency, token usage, response quality)
+  - Statistical comparison & fingerprinting to detect model identity
+  - Web dashboard to visualize results
+  - CLI for running benchmarks in CI/CD
+
+---
+
+## 🚨 HARD RULES
+
+### Security
+
+- ❌ **NEVER** commit secrets, API keys, or tokens to code or config files
+- ✅ Use `.env` files (gitignored) and `pydantic-settings` for all secrets
+- ✅ Parameterized queries only — no string interpolation in SQL
+- ✅ Validate all external input with Pydantic models
+
+### Performance
+
+- ✅ Use `async/await` for all I/O (HTTP calls, DB queries, file ops)
+- ✅ Use `httpx.AsyncClient` with connection pooling for API calls
+- ✅ Use SQLAlchemy async sessions with proper context managers
+- ✅ Batch concurrent API calls with `asyncio.gather()` where appropriate
+
+### Architecture
+
+- ✅ Dependency injection via FastAPI `Depends()`
+- ✅ Strict separation: handlers → services → repositories → models
+- ✅ Each layer has a single responsibility
+- ✅ Config is centralized in one place (`src/config.py`)
+
+---
+
+## 📐 CODE STYLE
+
+- **Type hints** on ALL function signatures and return types
+- **Docstrings** on all public functions (Google style)
+- **Descriptive names** — no single-letter variables except `i`, `_` in comprehensions
+- **Early returns** to reduce nesting
+- **Max 30 lines** per function — extract helpers if longer
+- **Pydantic models** for all data structures crossing boundaries
+- **f-strings** for string formatting
+- **`pathlib.Path`** over `os.path`
+
+---
+
+## 🏗 PATTERNS TO USE
+
+| Pattern                | Usage                                                            |
+| ---------------------- | ---------------------------------------------------------------- |
+| **Result pattern**     | Return `Result[T, Error]` for operations that can fail           |
+| **Service pattern**    | Business logic lives in service classes, not in handlers         |
+| **Repository pattern** | DB access abstracted behind repository interfaces                |
+| **Adapter pattern**    | Each AI provider gets an adapter implementing a common interface |
+| **Factory pattern**    | Create model adapters dynamically from config                    |
+| **Strategy pattern**   | Benchmark suites are pluggable strategies                        |
+
+---
+
+## 🚫 PATTERNS TO AVOID
+
+| Anti-pattern              | Why                                                 |
+| ------------------------- | --------------------------------------------------- |
+| **God objects**           | Split into focused, single-responsibility classes   |
+| **Magic numbers/strings** | Use enums and constants                             |
+| **Mutable global state**  | Use DI and explicit passing                         |
+| **Generic `utils.py`**    | Create specific modules (`string_helpers.py`, etc.) |
+| **Bare `except:`**        | Always catch specific exceptions                    |
+| **Print debugging**       | Use `structlog` or `logging`                        |
+| **Nested callbacks**      | Use async/await                                     |
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+benchmark/
+├── src/
+│   ├── __init__.py
+│   ├── main.py                  # FastAPI app entry point
+│   ├── config.py                # Pydantic Settings configuration
+│   ├── database.py              # SQLAlchemy engine & session setup
+│   ├── handlers/                # API route handlers (thin layer)
+│   │   ├── __init__.py
+│   │   ├── benchmarks.py
+│   │   └── results.py
+│   ├── services/                # Business logic
+│   │   ├── __init__.py
+│   │   ├── benchmark_runner.py
+│   │   ├── model_comparator.py
+│   │   └── fingerprint.py
+│   ├── repositories/            # Database access
+│   │   ├── __init__.py
+│   │   ├── benchmark_repo.py
+│   │   └── result_repo.py
+│   ├── models/                  # SQLAlchemy ORM models
+│   │   ├── __init__.py
+│   │   ├── benchmark.py
+│   │   └── result.py
+│   ├── schemas/                 # Pydantic request/response schemas
+│   │   ├── __init__.py
+│   │   ├── benchmark.py
+│   │   └── result.py
+│   ├── adapters/                # AI provider adapters
+│   │   ├── __init__.py
+│   │   ├── base.py              # Abstract base adapter
+│   │   ├── openai_adapter.py
+│   │   ├── anthropic_adapter.py
+│   │   └── generic_adapter.py   # For OpenAI-compatible APIs
+│   └── prompts/                 # Benchmark prompt suites
+│       ├── __init__.py
+│       ├── identity.py          # "Who are you?" probes
+│       ├── capability.py        # Capability-specific tests
+│       └── fingerprint.py       # Behavioral fingerprinting prompts
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py              # Shared fixtures
+│   ├── test_benchmark_runner.py
+│   ├── test_model_comparator.py
+│   └── test_adapters/
+│       └── test_generic_adapter.py
+├── alembic/                     # Database migrations
+│   └── versions/
+├── alembic.ini
+├── .env.example
+├── .gitignore
+├── pyproject.toml
+└── README.md
+```
+
+---
+
+## 🔑 ENVIRONMENT VARIABLES
+
+```env
+# === REQUIRED ===
+DATABASE_URL=sqlite+aiosqlite:///./benchmarker.db
+
+# === AI PROVIDER API KEYS (add as needed) ===
+# OPENAI_API_KEY=
+# ANTHROPIC_API_KEY=
+# SUSPECT_API_KEY=           # The API you're testing/verifying
+# SUSPECT_API_BASE_URL=      # Base URL of the suspect API
+
+# === OPTIONAL ===
+# LOG_LEVEL=INFO
+# BENCHMARK_TIMEOUT=30       # Seconds per API call
+# MAX_CONCURRENT_CALLS=5     # Limit parallel API requests
+```
+
+---
+
+## 📚 GLOSSARY
+
+| Abbreviation     | Meaning                        |
+| ---------------- | ------------------------------ |
+| `ctx`            | Context                        |
+| `repo`           | Repository                     |
+| `svc`            | Service                        |
+| `dto`            | Data Transfer Object           |
+| `handler`        | API route handler (controller) |
+| `adapter`        | AI provider adapter            |
+| `cfg` / `config` | Configuration                  |
+| `db`             | Database                       |
+| `req` / `res`    | Request / Response             |
+| `bench`          | Benchmark                      |
+| `fp`             | Fingerprint                    |
+
+---
+
+## ✅ TESTING
+
+- **Test alongside code** — tests mirror `src/` structure
+- **Mock all externals** — API calls, database, file system
+- **Cover edge cases** — empty inputs, timeouts, malformed responses
+- **Target 80% coverage** minimum
+- **Use `pytest`** with `pytest-asyncio` for async tests
+- **Fixtures in `conftest.py`** — shared test data and mocks
+- **Test naming:** `test_<function>_<scenario>_<expected>` (e.g., `test_run_benchmark_timeout_raises_error`)
+- **Use `httpx.AsyncClient`** for integration testing FastAPI endpoints
