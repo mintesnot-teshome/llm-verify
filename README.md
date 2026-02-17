@@ -57,15 +57,87 @@ pytest
 
 ## How It Works
 
-1. **Run benchmarks** against a trusted model (e.g., real Claude API) → baseline
+### Option A: With a Verified API Key (Full Comparison)
+
+If you have a real API key from the official provider (e.g., Anthropic, OpenAI):
+
+1. **Run benchmarks** against the trusted model (e.g., real Claude API) → baseline
 2. **Run same benchmarks** against the suspect API
-3. **Compare** the two runs — the system analyzes:
-   - Response latency patterns
-   - Response length & style
-   - Token usage
-   - Error rates
-   - Vocabulary & formatting fingerprints
+3. **Compare** the two runs — the system analyzes latency, style, token usage, error rates, vocabulary & formatting fingerprints
 4. **Get verdict:** MATCH, MISMATCH, or INCONCLUSIVE
+
+### Option B: Without a Real API Key (Suspect-Only Analysis)
+
+**You don't need an official API key to detect fraud.** The suspect API alone reveals plenty:
+
+1. **Configure only the suspect API** in your `.env`:
+
+   ```env
+   SUSPECT_API_KEY=your-suspect-key
+   SUSPECT_API_BASE_URL=https://suspect-provider.example.com/api
+   ```
+
+2. **Run identity probes** against the suspect:
+
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/benchmarks/ \
+     -H "Content-Type: application/json" \
+     -d '{
+       "name": "Suspect Identity Test",
+       "prompt_suite": "identity",
+       "model_configs": [
+         {"model_name": "claude-sonnet-4-20250514", "provider": "suspect"}
+       ]
+     }'
+   ```
+
+3. **Check what the model says about itself.** Identity probes ask the model who it is in 10 different ways — direct, indirect, through jailbreaks, knowledge cutoff checks, and capability boundaries. A real model gives consistent answers. A fake one contradicts itself.
+
+4. **Get the fingerprint** to see behavioral patterns:
+   ```bash
+   curl http://localhost:8000/api/v1/results/{run_id}/fingerprint?model_name=claude-sonnet-4-20250514
+   ```
+
+#### What to Look For (No Baseline Needed)
+
+| Red Flag                                  | What It Means                                                                          |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Inconsistent knowledge cutoffs**        | The model says different dates in different probes — real models have one fixed cutoff |
+| **Self-identifies as a different model**  | Claims to be Claude 3.5 Sonnet when you requested Claude 4                             |
+| **Mentions "proxy" or "managed server"**  | The model itself knows it's behind a relay                                             |
+| **Very high latency (>10s per response)** | Suggests an intermediary relay adding overhead                                         |
+| **Model name mismatch**                   | API returns `model: X` in the header but the model self-identifies as `Y`              |
+| **Inconsistent capabilities**             | Claims abilities it doesn't have, or lacks abilities the real model has                |
+
+#### Supported Protocols
+
+The suspect API can use either protocol — set `protocol` in your model config:
+
+| Protocol                          | When to Use                                 | Example Providers              |
+| --------------------------------- | ------------------------------------------- | ------------------------------ |
+| `anthropic` (default for suspect) | Suspect uses Anthropic Messages API format  | opuscode.pro, Claude resellers |
+| `openai`                          | Suspect uses OpenAI Chat Completions format | Most third-party proxies       |
+
+```json
+{
+  "model_name": "claude-sonnet-4-20250514",
+  "provider": "suspect",
+  "protocol": "anthropic"
+}
+```
+
+#### Free Tier Options for Baselines
+
+If you want to compare but don't have premium API keys, these offer free tiers:
+
+| Provider          | Free Tier                | Sign Up                                            |
+| ----------------- | ------------------------ | -------------------------------------------------- |
+| **Google Gemini** | 15 RPM free              | [aistudio.google.com](https://aistudio.google.com) |
+| **Mistral**       | Free trial credits       | [console.mistral.ai](https://console.mistral.ai)   |
+| **Groq**          | Free rate-limited access | [console.groq.com](https://console.groq.com)       |
+| **OpenRouter**    | Some models free         | [openrouter.ai](https://openrouter.ai)             |
+
+Use these as `generic` providers with the OpenAI-compatible protocol to create baselines.
 
 ## Project Structure
 

@@ -1,4 +1,4 @@
-# 📦 Extended Context — AI Benchmarker
+# 📦 Extended Context — LLM Verify
 
 > This file holds deeper context for complex features, domain-specific knowledge,
 > architecture diagrams, and session-specific notes. Copilot reads this alongside
@@ -63,6 +63,28 @@ AI models have behavioral fingerprints that are hard to fake:
 A "suspect API" is an endpoint that claims to serve Model X but might actually be Model Y.
 The system compares the suspect's responses against known baselines from verified APIs.
 
+### Suspect API Protocol Detection
+
+The suspect provider in the adapter factory now defaults to **Anthropic Messages protocol** (not OpenAI).
+This is configured via:
+
+- `_DEFAULT_PROTOCOL` map in `src/adapters/factory.py` — `suspect` → `anthropic`
+- Can be overridden per-request via `protocol` field on `ModelConfig` schema
+- Auth uses `x-api-key` header (Anthropic style), NOT `Authorization: Bearer` (OpenAI style)
+
+### Known Suspect: opuscode.pro
+
+| Field                 | Value                                                                    |
+| --------------------- | ------------------------------------------------------------------------ |
+| Base URL              | `https://opuscode.pro/api`                                               |
+| Protocol              | Anthropic Messages API                                                   |
+| Endpoint              | `/v1/messages`                                                           |
+| Auth                  | `x-api-key` header                                                       |
+| Available Models      | `Opus 4.6`, `Sonnet 4.5`, `Haiku 4.5` (their naming)                     |
+| Default Model         | `Opus 4.6`                                                               |
+| Actual Model (tested) | `claude-3-5-sonnet-20241022` (Claude 3.5 Sonnet)                         |
+| Red Flags             | Inconsistent knowledge cutoffs, mentions "proxy server", 14s avg latency |
+
 ---
 
 ## 🧩 Multi-File Feature Notes
@@ -112,8 +134,13 @@ benchmark_runner.run(config) →
 > _Temporary notes for the current development session. Clear after each major milestone._
 
 - **Session date:** 2026-02-17
-- **Focus:** Project bootstrap and scaffolding
-- **Notes:** Initial setup — creating project structure, config, and tooling
+- **Focus:** Live suspect API testing & fraud analysis
+- **Notes:**
+  - Factory updated: `suspect` → Anthropic protocol by default
+  - `ModelConfig` now has `protocol` field for OpenAI/Anthropic override
+  - First benchmark run against opuscode.pro confirmed fraud: Claude 3.5 Sonnet served as Sonnet 4
+  - README updated with no-API-key usage guide and red flags documentation
+  - Server runs on port 8001 (via `python -m uvicorn src.main:app --host 127.0.0.1 --port 8001`)
 
 ---
 

@@ -18,7 +18,7 @@
 
 | Field        | Value                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------ |
-| **Name**     | AI Benchmarker                                                                                         |
+| **Name**     | LLM Verify                                                                                             |
 | **Domain**   | AI model verification & benchmarking — detect model fraud (e.g., resold APIs misrepresenting identity) |
 | **Stack**    | Python 3.12+ · FastAPI · Pydantic v2 · httpx (async) · SQLAlchemy 2.0 (async) · Alembic                |
 | **Database** | SQLite (dev & prod — file-based, zero-config)                                                          |
@@ -38,20 +38,26 @@
 
 ## ✅ COMPLETED WORK
 
-| #   | Date       | Task                                                     |
-| --- | ---------- | -------------------------------------------------------- |
-| 1   | 2026-02-17 | Project bootstrap — copilot context, settings, gitignore |
-|     |            |                                                          |
+| #   | Date       | Task                                                                   |
+| --- | ---------- | ---------------------------------------------------------------------- |
+| 1   | 2026-02-17 | Project bootstrap — copilot context, settings, gitignore               |
+| 2   | 2026-02-17 | Full project scaffolding — 30+ files, all layers, 32 prompts           |
+| 3   | 2026-02-17 | All 9 unit tests passing                                               |
+| 4   | 2026-02-17 | Renamed to LLM Verify, pushed to GitHub                                |
+| 5   | 2026-02-17 | Fixed factory: suspect provider now uses Anthropic protocol by default |
+| 6   | 2026-02-17 | First live benchmark — identity probes vs suspect API (opuscode.pro)   |
+| 7   | 2026-02-17 | Confirmed fraud: suspect serves Claude 3.5 Sonnet as Claude Sonnet 4   |
+| 8   | 2026-02-17 | Updated README with no-API-key usage guide and red flags doc           |
 
 ---
 
 ## 🚧 CURRENT FOCUS
 
-| Item           | Detail                                  |
-| -------------- | --------------------------------------- |
-| **Working on** | Project scaffolding & initial structure |
-| **Blockers**   | None                                    |
-| **Next up**    | Core benchmark runner & model adapters  |
+| Item           | Detail                                                          |
+| -------------- | --------------------------------------------------------------- |
+| **Working on** | Live testing & analysis of suspect APIs                         |
+| **Blockers**   | None                                                            |
+| **Next up**    | Test more models (Opus, Haiku), capability suite, web dashboard |
 
 ---
 
@@ -59,9 +65,10 @@
 
 > ⚠️ **NEVER store actual values here — names/keys only!**
 
-| #   | Name | Service | Notes |
-| --- | ---- | ------- | ----- |
-|     |      |         |       |
+| #   | Name                 | Service      | Notes                                |
+| --- | -------------------- | ------------ | ------------------------------------ |
+| 1   | SUSPECT_API_KEY      | opuscode.pro | Suspect API key — Anthropic protocol |
+| 2   | SUSPECT_API_BASE_URL | opuscode.pro | https://opuscode.pro/api             |
 
 ---
 
@@ -77,6 +84,9 @@
 
 - **Core Problem:** Users are being sold API access to models misrepresented as premium models (e.g., Kimi sold as Claude). The system prompt says "Claude" but the underlying model is actually Kimi.
 - **Goal:** Build a benchmark suite that can fingerprint AI model behavior to verify true model identity, comparing response patterns, capabilities, and quirks across models.
+- **Suspect API (opuscode.pro):** Uses **Anthropic Messages protocol**, NOT OpenAI. Endpoint: `https://opuscode.pro/api/v1/messages`. Auth header: `x-api-key`. Available models: `Opus 4.6`, `Sonnet 4.5`, `Haiku 4.5` (their naming). Default model: `Opus 4.6`.
+- **First test result:** Suspect claims to be Claude Sonnet 4 but self-identifies as **claude-3-5-sonnet-20241022** (Claude 3.5 Sonnet). Gave 3 different knowledge cutoffs, mentions "custom proxy server", avg latency 14s.
+- **Factory mapping:** `suspect` provider defaults to `anthropic` protocol. Can be overridden via `protocol` field in ModelConfig.
 - **Key Features Planned:**
   - Run standardized prompt suites against multiple API endpoints
   - Collect and store structured benchmark results (latency, token usage, response quality)
