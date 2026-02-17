@@ -16,6 +16,11 @@ class ModelConfig(BaseModel):
     )
     api_key: str = Field(default="", description="API key (loaded from env if empty)")
     api_base_url: str = Field(default="", description="Base URL for the API")
+    protocol: str = Field(
+        default="",
+        pattern=r"^(openai|anthropic|)$",
+        description="API protocol to use (openai or anthropic). Auto-detected from provider if empty.",
+    )
 
 
 class BenchmarkResultResponse(BaseModel):

@@ -10,8 +10,15 @@ from src.schemas.result import ModelConfig
 _ADAPTER_MAP: dict[str, type[ModelAdapter]] = {
     "openai": OpenAIAdapter,
     "anthropic": AnthropicAdapter,
-    "suspect": GenericAdapter,
     "generic": GenericAdapter,
+}
+
+# Default protocol for each provider (used when ModelConfig.protocol is empty)
+_DEFAULT_PROTOCOL: dict[str, str] = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "suspect": "anthropic",
+    "generic": "openai",
 }
 
 
@@ -28,9 +35,10 @@ def create_adapter(config: ModelConfig, timeout: int | None = None) -> ModelAdap
     Raises:
         ValueError: If the provider is not recognized.
     """
-    adapter_cls = _ADAPTER_MAP.get(config.provider)
+    protocol = config.protocol or _DEFAULT_PROTOCOL.get(config.provider, "openai")
+    adapter_cls = _ADAPTER_MAP.get(protocol)
     if adapter_cls is None:
-        msg = f"Unknown provider: {config.provider!r}. Choose from: {list(_ADAPTER_MAP.keys())}"
+        msg = f"Unknown protocol: {protocol!r}. Choose from: {list(_ADAPTER_MAP.keys())}"
         raise ValueError(msg)
 
     settings = get_settings()

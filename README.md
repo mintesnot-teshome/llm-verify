@@ -4,11 +4,11 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Detect fake AI APIs** — Verify if an LLM API is actually serving the model it claims. Catch resellers who sell you "Claude" or "GPT-4" but secretly serve Kimi, LLaMA, or other cheaper models behind a system prompt.
+> **Detect fake AI APIs** — Verify if an LLM API is actually serving the model it claims. Catch resellers who sell you "Claude" or "ChatGPT" but secretly serve Kimi, LLaMA, or other cheaper models behind a system prompt.
 
 ## The Problem
 
-AI API resellers are committing **model fraud**: they sell access to premium models like Claude or GPT-4, but behind the scenes, they use a cheaper model with a system prompt like _"You are Claude, made by Anthropic."_ You're paying premium prices for a knockoff.
+AI API resellers are committing **model fraud**: they sell access to premium models like Claude or ChatGPT, but behind the scenes, they use a cheaper model with a system prompt like _"You are Claude, made by Anthropic."_ You're paying premium prices for a knockoff.
 
 **LLM Verify** catches this by running behavioral fingerprinting benchmarks — a suite of prompts designed to reveal a model's true identity through its response patterns, not just what it _says_ it is.
 
