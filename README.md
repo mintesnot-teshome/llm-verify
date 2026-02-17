@@ -45,15 +45,16 @@ pytest
 
 ## API Endpoints
 
-| Method | Endpoint                           | Description                        |
-| ------ | ---------------------------------- | ---------------------------------- |
-| GET    | `/health`                          | Health check                       |
-| POST   | `/api/v1/benchmarks/`              | Start a new benchmark run          |
-| GET    | `/api/v1/benchmarks/`              | List all benchmark runs            |
-| GET    | `/api/v1/benchmarks/{id}`          | Get a specific benchmark run       |
-| GET    | `/api/v1/results/{run_id}`         | Get results for a run              |
-| POST   | `/api/v1/results/compare`          | Compare two runs (fraud detection) |
-| GET    | `/api/v1/results/{id}/fingerprint` | Generate behavioral fingerprint    |
+| Method | Endpoint                           | Description                               |
+| ------ | ---------------------------------- | ----------------------------------------- |
+| GET    | `/health`                          | Health check                              |
+| POST   | `/api/v1/benchmarks/`              | Start a new benchmark run                 |
+| GET    | `/api/v1/benchmarks/`              | List all benchmark runs                   |
+| GET    | `/api/v1/benchmarks/{id}`          | Get a specific benchmark run              |
+| GET    | `/api/v1/results/{run_id}`         | Get results for a run                     |
+| POST   | `/api/v1/results/compare`          | Compare two runs (fraud detection)        |
+| GET    | `/api/v1/results/{id}/fingerprint` | Generate behavioral fingerprint           |
+| POST   | `/api/v1/analysis/deep`            | **Run deep analysis — full fraud report** |
 
 ## How It Works
 
@@ -138,6 +139,81 @@ If you want to compare but don't have premium API keys, these offer free tiers:
 | **OpenRouter**    | Some models free         | [openrouter.ai](https://openrouter.ai)             |
 
 Use these as `generic` providers with the OpenAI-compatible protocol to create baselines.
+
+## 🔬 Deep Analysis — One-Click Fraud Report
+
+Instead of running individual benchmark suites and manually comparing results, **deep analysis** does everything in one call:
+
+1. Runs **all prompt suites** (identity, capability, fingerprint) against every model
+2. **Fingerprints** each model's behavior (style, vocabulary, structure, latency)
+3. **Cross-compares** all models to detect if they're secretly the same
+4. **Detects red flags** automatically (identity mismatches, inconsistent cutoffs, proxy indicators, suspicious similarity)
+5. Returns a structured **fraud report** with severity-ranked findings and an overall verdict
+
+### Usage
+
+```bash
+curl -X POST http://localhost:8000/api/v1/analysis/deep \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Investigate opuscode.pro",
+    "model_configs": [
+      {"model_name": "Opus 4.6", "provider": "suspect"},
+      {"model_name": "Sonnet 4.5", "provider": "suspect"},
+      {"model_name": "Haiku 4.5", "provider": "suspect"}
+    ],
+    "suites": ["identity", "capability", "fingerprint"]
+  }'
+```
+
+### What You Get Back
+
+```json
+{
+  "name": "Investigate opuscode.pro",
+  "verdict": "FRAUD_DETECTED",
+  "red_flags": [
+    {
+      "severity": "HIGH",
+      "category": "identity",
+      "description": "Model self-identifies differently than requested name 'Opus 4.6'",
+      "evidence": "Claims: claude-3-5-sonnet-20241022"
+    },
+    {
+      "severity": "HIGH",
+      "category": "similarity",
+      "description": "Models 'Opus 4.6' and 'Sonnet 4.5' appear to be the SAME underlying model",
+      "evidence": "Similarity: 92.3%"
+    },
+    {
+      "severity": "HIGH",
+      "category": "consistency",
+      "description": "Inconsistent knowledge cutoff dates across responses",
+      "evidence": "Claimed cutoffs: April 2024, March 2025"
+    }
+  ],
+  "model_reports": ["...per-model fingerprints, latencies, identity claims..."],
+  "cross_model_comparisons": ["...pairwise similarity between all models..."],
+  "summary": "Deep Analysis — Verdict: FRAUD_DETECTED\n..."
+}
+```
+
+### Red Flag Categories
+
+| Category        | Severity | What It Detects                                                        |
+| --------------- | -------- | ---------------------------------------------------------------------- |
+| **identity**    | HIGH     | Model claims to be a different model than requested                    |
+| **consistency** | HIGH     | Multiple conflicting knowledge cutoff dates                            |
+| **similarity**  | HIGH     | Supposedly different models (Opus/Sonnet/Haiku) are actually identical |
+| **latency**     | MEDIUM   | Average response time >10s suggests proxy/relay overhead               |
+
+### Verdict Logic
+
+| Verdict            | Condition                            |
+| ------------------ | ------------------------------------ |
+| **FRAUD_DETECTED** | 2+ HIGH flags, or 1 HIGH + 1 MEDIUM  |
+| **INCONCLUSIVE**   | Some flags but insufficient evidence |
+| **LEGITIMATE**     | No HIGH or MEDIUM flags detected     |
 
 ## Project Structure
 

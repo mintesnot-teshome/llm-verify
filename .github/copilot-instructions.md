@@ -38,26 +38,27 @@
 
 ## ✅ COMPLETED WORK
 
-| #   | Date       | Task                                                                   |
-| --- | ---------- | ---------------------------------------------------------------------- |
-| 1   | 2026-02-17 | Project bootstrap — copilot context, settings, gitignore               |
-| 2   | 2026-02-17 | Full project scaffolding — 30+ files, all layers, 32 prompts           |
-| 3   | 2026-02-17 | All 9 unit tests passing                                               |
-| 4   | 2026-02-17 | Renamed to LLM Verify, pushed to GitHub                                |
-| 5   | 2026-02-17 | Fixed factory: suspect provider now uses Anthropic protocol by default |
-| 6   | 2026-02-17 | First live benchmark — identity probes vs suspect API (opuscode.pro)   |
-| 7   | 2026-02-17 | Confirmed fraud: suspect serves Claude 3.5 Sonnet as Claude Sonnet 4   |
-| 8   | 2026-02-17 | Updated README with no-API-key usage guide and red flags doc           |
+| #   | Date       | Task                                                                    |
+| --- | ---------- | ----------------------------------------------------------------------- |
+| 1   | 2026-02-17 | Project bootstrap — copilot context, settings, gitignore                |
+| 2   | 2026-02-17 | Full project scaffolding — 30+ files, all layers, 32 prompts            |
+| 3   | 2026-02-17 | All 9 unit tests passing                                                |
+| 4   | 2026-02-17 | Renamed to LLM Verify, pushed to GitHub                                 |
+| 5   | 2026-02-17 | Fixed factory: suspect provider now uses Anthropic protocol by default  |
+| 6   | 2026-02-17 | First live benchmark — identity probes vs suspect API (opuscode.pro)    |
+| 7   | 2026-02-17 | Confirmed fraud: suspect serves Claude 3.5 Sonnet as Claude Sonnet 4    |
+| 8   | 2026-02-17 | Updated README with no-API-key usage guide and red flags doc            |
+| 9   | 2026-02-17 | Added deep analysis feature — service, schemas, handler, README section |
 
 ---
 
 ## 🚧 CURRENT FOCUS
 
-| Item           | Detail                                                          |
-| -------------- | --------------------------------------------------------------- |
-| **Working on** | Live testing & analysis of suspect APIs                         |
-| **Blockers**   | None                                                            |
-| **Next up**    | Test more models (Opus, Haiku), capability suite, web dashboard |
+| Item           | Detail                                                              |
+| -------------- | ------------------------------------------------------------------- |
+| **Working on** | Deep analysis feature complete — ready for live testing             |
+| **Blockers**   | None                                                                |
+| **Next up**    | Live test deep analysis endpoint, web dashboard, more prompt suites |
 
 ---
 
