@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -15,7 +16,7 @@ class CompletionResponse:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     latency_ms: float | None = None
-    raw_response: dict | None = None
+    raw_response: dict[str, Any] | None = None
     error: str | None = None
 
     @property

@@ -1,8 +1,8 @@
 """Benchmark prompt suites for AI model fingerprinting."""
 
-from src.prompts.capability import CAPABILITY_PROMPTS  # noqa: F401
-from src.prompts.fingerprint import FINGERPRINT_PROMPTS  # noqa: F401
-from src.prompts.identity import IDENTITY_PROMPTS  # noqa: F401
+from src.prompts.capability import CAPABILITY_PROMPTS
+from src.prompts.fingerprint import FINGERPRINT_PROMPTS
+from src.prompts.identity import IDENTITY_PROMPTS
 
 PROMPT_SUITES: dict[str, list[dict[str, str]]] = {
     "identity": IDENTITY_PROMPTS,
@@ -11,8 +11,8 @@ PROMPT_SUITES: dict[str, list[dict[str, str]]] = {
 }
 
 __all__ = [
-    "IDENTITY_PROMPTS",
     "CAPABILITY_PROMPTS",
     "FINGERPRINT_PROMPTS",
+    "IDENTITY_PROMPTS",
     "PROMPT_SUITES",
 ]

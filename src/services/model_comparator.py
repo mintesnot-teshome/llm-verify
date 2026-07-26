@@ -11,6 +11,9 @@ from src.schemas.result import ComparisonRequest, ComparisonScore
 
 logger = logging.getLogger(__name__)
 
+MIN_COMPARISON_RESULTS = 8
+MIN_COMPARISON_SUCCESS_RATE = 0.80
+
 
 class ModelComparatorService:
     """Compares benchmark results between a baseline and suspect run."""
@@ -30,8 +33,19 @@ class ModelComparatorService:
         baseline = await self._result_repo.get_by_run_id(request.baseline_run_id)
         suspect = await self._result_repo.get_by_run_id(request.suspect_run_id)
 
-        if not baseline or not suspect:
-            return self._inconclusive("One or both runs have no results.")
+        evidence_issue = _comparison_evidence_issue(baseline, suspect)
+        if evidence_issue:
+            side, reason = evidence_issue
+            if side == "suspect":
+                return ComparisonScore(
+                    baseline_run_id=request.baseline_run_id,
+                    suspect_run_id=request.suspect_run_id,
+                    overall_similarity=0.0,
+                    dimensions={"evidence_quality": 0.0},
+                    verdict="MISMATCH",
+                    details=reason,
+                )
+            return self._inconclusive(request, reason)
 
         dimensions = self._compute_dimensions(baseline, suspect)
         overall = self._compute_overall(dimensions)
@@ -61,11 +75,25 @@ class ModelComparatorService:
             Dictionary mapping dimension names to similarity scores (0.0-1.0).
         """
         return {
+            "prompt_coverage": self._compare_prompt_coverage(baseline, suspect),
             "latency": self._compare_latency(baseline, suspect),
             "response_length": self._compare_response_length(baseline, suspect),
             "token_usage": self._compare_token_usage(baseline, suspect),
             "error_rate": self._compare_error_rates(baseline, suspect),
         }
+
+    def _compare_prompt_coverage(
+        self,
+        baseline: list[BenchmarkResult],
+        suspect: list[BenchmarkResult],
+    ) -> float:
+        """Ensure both runs contain the same probe set."""
+        baseline_prompts = {result.prompt_text for result in baseline}
+        suspect_prompts = {result.prompt_text for result in suspect}
+        union = baseline_prompts | suspect_prompts
+        if not union:
+            return 0.0
+        return len(baseline_prompts & suspect_prompts) / len(union)
 
     def _compare_latency(
         self,
@@ -174,19 +202,17 @@ class ModelComparatorService:
             Overall similarity (0.0-1.0).
         """
         weights = {
-            "latency": 0.15,
-            "response_length": 0.30,
-            "token_usage": 0.25,
-            "error_rate": 0.30,
+            "prompt_coverage": 0.25,
+            "latency": 0.10,
+            "response_length": 0.25,
+            "token_usage": 0.20,
+            "error_rate": 0.20,
         }
         total_weight = sum(weights.get(key, 0.0) for key in dimensions)
         if total_weight == 0:
             return 0.5
 
-        weighted_sum = sum(
-            score * weights.get(key, 0.0)
-            for key, score in dimensions.items()
-        )
+        weighted_sum = sum(score * weights.get(key, 0.0) for key, score in dimensions.items())
         return weighted_sum / total_weight
 
     def _determine_verdict(self, overall: float) -> str:
@@ -198,7 +224,7 @@ class ModelComparatorService:
         Returns:
             MATCH, MISMATCH, or INCONCLUSIVE.
         """
-        if overall >= 0.80:
+        if overall >= 0.90:
             return "MATCH"
         if overall <= 0.50:
             return "MISMATCH"
@@ -219,7 +245,11 @@ class ModelComparatorService:
             lines.append(f"  {key}: {score:.2%}")
         return "\n".join(lines)
 
-    def _inconclusive(self, reason: str) -> ComparisonScore:
+    def _inconclusive(
+        self,
+        request: ComparisonRequest,
+        reason: str,
+    ) -> ComparisonScore:
         """Return an inconclusive comparison result.
 
         Args:
@@ -229,8 +259,8 @@ class ModelComparatorService:
             A ComparisonScore with INCONCLUSIVE verdict.
         """
         return ComparisonScore(
-            baseline_run_id="",
-            suspect_run_id="",
+            baseline_run_id=request.baseline_run_id,
+            suspect_run_id=request.suspect_run_id,
             overall_similarity=0.5,
             dimensions={},
             verdict="INCONCLUSIVE",
@@ -251,3 +281,38 @@ def _error_rate(results: list[BenchmarkResult]) -> float:
         return 0.0
     errors = sum(1 for r in results if r.error_message)
     return errors / len(results)
+
+
+def _comparison_evidence_issue(
+    baseline: list[BenchmarkResult],
+    suspect: list[BenchmarkResult],
+) -> tuple[str, str] | None:
+    """Return why a comparison is unsafe, or None when evidence is sufficient."""
+    if not baseline or not suspect:
+        return "baseline", "One or both runs have no results."
+
+    for label, results in (("baseline", baseline), ("suspect", suspect)):
+        successful = sum(
+            1 for result in results if result.response_text and not result.error_message
+        )
+        success_rate = successful / len(results)
+        if successful < MIN_COMPARISON_RESULTS:
+            return (
+                label,
+                f"The {label} run has only {successful} successful probes; "
+                f"at least {MIN_COMPARISON_RESULTS} are required. "
+                "A suspect cannot pass by refusing probes.",
+            )
+        if success_rate < MIN_COMPARISON_SUCCESS_RATE:
+            return (
+                label,
+                f"The {label} run success rate is {success_rate:.1%}; "
+                f"at least {MIN_COMPARISON_SUCCESS_RATE:.0%} is required. "
+                "A suspect cannot pass by failing difficult probes.",
+            )
+
+    baseline_prompts = {result.prompt_text for result in baseline}
+    suspect_prompts = {result.prompt_text for result in suspect}
+    if baseline_prompts != suspect_prompts:
+        return "baseline", "Runs do not contain the same prompt set."
+    return None

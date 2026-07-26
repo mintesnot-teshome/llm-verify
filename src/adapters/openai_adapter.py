@@ -1,6 +1,7 @@
 """OpenAI adapter — talks to the official OpenAI API."""
 
 import time
+from typing import Any
 
 import httpx
 
@@ -79,7 +80,7 @@ def _build_messages(prompt: str, system_prompt: str) -> list[dict[str, str]]:
     return messages
 
 
-def _parse_openai_response(data: dict, latency_ms: float) -> CompletionResponse:
+def _parse_openai_response(data: dict[str, Any], latency_ms: float) -> CompletionResponse:
     """Parse an OpenAI-format chat completion response."""
     usage = data.get("usage", {})
     choices = data.get("choices", [])

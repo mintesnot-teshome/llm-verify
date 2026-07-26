@@ -1,6 +1,7 @@
 """Pydantic schemas for deep analysis requests and reports."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -61,8 +62,15 @@ class ModelReport(BaseModel):
     )
     avg_latency_ms: float = 0.0
     total_probes: int = 0
+    successful_probes: int = 0
     errors: int = 0
+    error_rate: float = 0.0
     timeout_rate: float = 0.0
+    evidence_quality: Literal["SUFFICIENT", "DEGRADED", "INSUFFICIENT"] = "INSUFFICIENT"
+    proxy_indicators: list[str] = Field(
+        default_factory=list,
+        description="Response excerpts that mention a proxy, relay, or intermediary",
+    )
     fingerprint: dict[str, object] = Field(default_factory=dict)
 
 
@@ -97,6 +105,9 @@ class DeepAnalysisReport(BaseModel):
     red_flags: list[RedFlag] = Field(default_factory=list)
     verdict: str = Field(
         default="INCONCLUSIVE",
-        description="FRAUD_DETECTED, LEGITIMATE, or INCONCLUSIVE",
+        description=(
+            "FRAUD_DETECTED, SUSPICIOUS, NO_FRAUD_SIGNALS, or INCONCLUSIVE. "
+            "NO_FRAUD_SIGNALS is not proof of model identity."
+        ),
     )
     summary: str = Field(default="", description="Human-readable summary")

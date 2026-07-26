@@ -3,6 +3,7 @@
 import logging
 import re
 from collections import Counter
+from collections.abc import Sequence
 
 from src.models.result import BenchmarkResult
 
@@ -97,12 +98,8 @@ class FingerprintService:
             Structure metrics.
         """
         return {
-            "avg_paragraph_count": _safe_mean(
-                [r.response_text.count("\n\n") + 1 for r in results]
-            ),
-            "avg_line_count": _safe_mean(
-                [r.response_text.count("\n") + 1 for r in results]
-            ),
+            "avg_paragraph_count": _safe_mean([r.response_text.count("\n\n") + 1 for r in results]),
+            "avg_line_count": _safe_mean([r.response_text.count("\n") + 1 for r in results]),
             "starts_with_greeting_ratio": _ratio_matching(
                 results, r"^(Hi|Hello|Hey|Sure|Of course|Great|Certainly)"
             ),
@@ -133,7 +130,7 @@ class FingerprintService:
         }
 
 
-def _safe_mean(values: list[int | float]) -> float:
+def _safe_mean(values: Sequence[int | float]) -> float:
     """Calculate mean safely, returning 0.0 for empty lists.
 
     Args:
@@ -177,8 +174,6 @@ def _ratio_containing(results: list[BenchmarkResult], phrases: list[str]) -> flo
         Ratio (0.0-1.0) of results containing at least one phrase.
     """
     matches = sum(
-        1
-        for r in results
-        if any(phrase in r.response_text.lower() for phrase in phrases)
+        1 for r in results if any(phrase in r.response_text.lower() for phrase in phrases)
     )
     return round(matches / max(len(results), 1), 4)

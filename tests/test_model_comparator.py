@@ -2,7 +2,6 @@
 
 import pytest
 
-from src.models.result import BenchmarkResult
 from src.repositories.result_repo import ResultRepository
 from src.schemas.result import ComparisonRequest
 from src.services.model_comparator import ModelComparatorService
@@ -12,7 +11,7 @@ async def _create_results(
     repo: ResultRepository,
     run_id: str,
     model_name: str,
-    count: int = 5,
+    count: int = 10,
     latency_base: float = 200.0,
     response_length: int = 500,
     error_count: int = 0,
@@ -100,3 +99,26 @@ async def test_compare_empty_runs_returns_inconclusive(db_session):
     )
 
     assert score.verdict == "INCONCLUSIVE"
+    assert score.baseline_run_id == "nonexistent-1"
+    assert score.suspect_run_id == "nonexistent-2"
+
+
+@pytest.mark.asyncio
+async def test_compare_fails_closed_with_too_few_results(db_session):
+    """A high similarity score must not become MATCH with weak evidence."""
+    from src.repositories.benchmark_repo import BenchmarkRepository
+
+    bench_repo = BenchmarkRepository(db_session)
+    result_repo = ResultRepository(db_session)
+    run1 = await bench_repo.create("Baseline", "", "identity")
+    run2 = await bench_repo.create("Suspect", "", "identity")
+
+    await _create_results(result_repo, run1.id, "gpt-4o", count=3)
+    await _create_results(result_repo, run2.id, "suspect", count=3)
+
+    score = await ModelComparatorService(db_session).compare(
+        ComparisonRequest(baseline_run_id=run1.id, suspect_run_id=run2.id)
+    )
+
+    assert score.verdict == "INCONCLUSIVE"
+    assert "at least 8" in score.details

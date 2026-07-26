@@ -32,7 +32,7 @@ class BenchmarkRunCreate(BaseModel):
         default=PromptSuite.IDENTITY,
         description="Which prompt suite to run",
     )
-    model_configs: list["ModelConfig"] = Field(  # type: ignore[name-defined]  # noqa: F821
+    model_configs: list["ModelConfig"] = Field(
         ...,
         min_length=1,
         description="List of model endpoints to benchmark",
@@ -55,6 +55,6 @@ class BenchmarkRunResponse(BaseModel):
 
 
 # Resolve forward reference after ModelConfig is importable
-from src.schemas.result import ModelConfig  # noqa: E402, F811
+from src.schemas.result import ModelConfig  # noqa: E402, TC001
 
 BenchmarkRunCreate.model_rebuild()

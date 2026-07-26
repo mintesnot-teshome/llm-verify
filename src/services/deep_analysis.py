@@ -4,9 +4,11 @@ import logging
 import re
 from datetime import UTC, datetime
 from itertools import combinations
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.models.result import BenchmarkResult
 from src.prompts import PROMPT_SUITES
 from src.repositories.result_repo import ResultRepository
 from src.schemas.analysis import (
@@ -23,10 +25,27 @@ from src.services.fingerprint import FingerprintService
 
 logger = logging.getLogger(__name__)
 
-# Identity-related regex patterns
-_MODEL_NAME_PATTERN = re.compile(
-    r"(claude[- ]\d[\w.\-]*|gpt[- ]\d[\w.\-]*|gemini[- ][\w.\-]*|"
-    r"llama[- ]\d[\w.\-]*|mistral[\w.\-]*|kimi[\w.\-]*|command[\w.\-]*)",
+MIN_VALID_PROBES = 8
+MIN_SUCCESS_RATE = 0.80
+
+_MODEL_NAME_SOURCE = (
+    r"(claude(?:[- ](?:opus|sonnet|haiku))?[- ]?\d+(?:[.\-]\d+)?"
+    r"(?:[- ](?:opus|sonnet|haiku))?(?:[- ]\d{6,8})?|"
+    r"gpt[- ]\d[\w.\-]*|gemini[- ][\w.\-]*|"
+    r"llama[- ]\d[\w.\-]*|mistral[\w.\-]*|kimi[\w.\-]*|command[\w.\-]*)"
+)
+_IDENTITY_CLAIM_PATTERNS = (
+    re.compile(
+        rf"\b(?:i am|i['\u2019]m|i identify as|my model(?: name)? is)\s+(?:an?\s+)?{_MODEL_NAME_SOURCE}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:model|model identifier|assistant)\s*(?:is|:)\s*{_MODEL_NAME_SOURCE}",
+        re.IGNORECASE,
+    ),
+)
+_NEGATED_IDENTITY_PATTERN = re.compile(
+    r"\b(?:not|isn['\u2019]t|am not|rather than|instead of)\s+$",
     re.IGNORECASE,
 )
 _CUTOFF_PATTERN = re.compile(
@@ -63,14 +82,12 @@ class DeepAnalysisService:
         model_reports: list[ModelReport] = []
 
         for config in request.model_configs:
-            report = await self._analyze_single_model(
-                config, request.suites, request.name
-            )
+            report = await self._analyze_single_model(config, request.suites, request.name)
             model_reports.append(report)
 
         cross_comparisons = self._cross_compare(model_reports)
         red_flags = self._detect_red_flags(model_reports, cross_comparisons)
-        verdict = self._determine_verdict(red_flags)
+        verdict = self._determine_verdict(red_flags, model_reports)
         summary = self._build_summary(model_reports, red_flags, verdict)
 
         return DeepAnalysisReport(
@@ -101,7 +118,7 @@ class DeepAnalysisService:
             A ModelReport with fingerprint and identity claims.
         """
         run_ids: dict[str, str] = {}
-        all_results: list = []
+        all_results: list[BenchmarkResult] = []
 
         for suite_name in suites:
             if suite_name not in PROMPT_SUITES:
@@ -125,6 +142,14 @@ class DeepAnalysisService:
         latencies = [r.latency_ms for r in all_results if r.latency_ms is not None]
         avg_latency = sum(latencies) / max(len(latencies), 1) if latencies else 0.0
         errors = sum(1 for r in all_results if r.error_message)
+        successful_probes = sum(1 for r in all_results if r.response_text and not r.error_message)
+        total_probes = len(all_results)
+        error_rate = errors / max(total_probes, 1)
+        timeout_count = sum(
+            1 for r in all_results if r.error_message and "timeout" in r.error_message.lower()
+        )
+        success_rate = successful_probes / max(total_probes, 1)
+        evidence_quality = _evidence_quality(successful_probes, success_rate)
 
         return ModelReport(
             model_name=config.model_name,
@@ -133,15 +158,17 @@ class DeepAnalysisService:
             identity_claims=identity_claims,
             knowledge_cutoffs=cutoffs,
             avg_latency_ms=round(avg_latency, 2),
-            total_probes=len(all_results),
+            total_probes=total_probes,
+            successful_probes=successful_probes,
             errors=errors,
-            timeout_rate=round(errors / max(len(all_results), 1), 4),
+            error_rate=round(error_rate, 4),
+            timeout_rate=round(timeout_count / max(total_probes, 1), 4),
+            evidence_quality=evidence_quality,
+            proxy_indicators=_extract_proxy_indicators(all_results),
             fingerprint=fingerprint,
         )
 
-    def _cross_compare(
-        self, reports: list[ModelReport]
-    ) -> list[CrossModelComparison]:
+    def _cross_compare(self, reports: list[ModelReport]) -> list[CrossModelComparison]:
         """Compare every pair of models for similarity.
 
         Args:
@@ -154,7 +181,11 @@ class DeepAnalysisService:
         for report_a, report_b in combinations(reports, 2):
             score = _fingerprint_similarity(report_a.fingerprint, report_b.fingerprint)
             shared = _find_shared_phrases(report_a, report_b)
-            verdict = _similarity_verdict(score)
+            verdict = _similarity_verdict(
+                score,
+                report_a.successful_probes,
+                report_b.successful_probes,
+            )
             comparisons.append(
                 CrossModelComparison(
                     model_a=report_a.model_name,
@@ -183,8 +214,10 @@ class DeepAnalysisService:
         flags: list[RedFlag] = []
         for report in reports:
             flags.extend(self._check_identity_flags(report))
+            flags.extend(self._check_evidence_flags(report))
             flags.extend(self._check_latency_flags(report))
             flags.extend(self._check_consistency_flags(report))
+            flags.extend(self._check_proxy_flags(report))
         for comp in comparisons:
             flags.extend(self._check_similarity_flags(comp))
         return sorted(flags, key=lambda f: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(f.severity, 3))
@@ -207,6 +240,27 @@ class DeepAnalysisService:
             )
         return flags
 
+    def _check_evidence_flags(self, report: ModelReport) -> list[RedFlag]:
+        """Prevent missing or failed probes from being interpreted as a clean result."""
+        if report.evidence_quality == "SUFFICIENT":
+            return []
+
+        severity = "HIGH" if report.evidence_quality == "INSUFFICIENT" else "MEDIUM"
+        success_rate = report.successful_probes / max(report.total_probes, 1)
+        return [
+            RedFlag(
+                severity=severity,
+                category="evidence",
+                description=(
+                    f"{report.evidence_quality.title()} evidence: "
+                    f"{report.successful_probes}/{report.total_probes} probes succeeded"
+                ),
+                evidence=(
+                    f"Success rate: {success_rate:.1%}; failed probes can hide identity mismatches"
+                ),
+            )
+        ]
+
     def _check_latency_flags(self, report: ModelReport) -> list[RedFlag]:
         """Check for latency anomalies suggesting a proxy/relay."""
         flags: list[RedFlag] = []
@@ -220,6 +274,19 @@ class DeepAnalysisService:
                 )
             )
         return flags
+
+    def _check_proxy_flags(self, report: ModelReport) -> list[RedFlag]:
+        """Report proxy or relay disclosures found in model responses."""
+        if not report.proxy_indicators:
+            return []
+        return [
+            RedFlag(
+                severity="MEDIUM",
+                category="proxy",
+                description="Responses mention a proxy, relay, or intermediary",
+                evidence=" | ".join(report.proxy_indicators[:3]),
+            )
+        ]
 
     def _check_consistency_flags(self, report: ModelReport) -> list[RedFlag]:
         """Check for inconsistent knowledge cutoffs or proxy mentions."""
@@ -236,9 +303,7 @@ class DeepAnalysisService:
             )
         return flags
 
-    def _check_similarity_flags(
-        self, comp: CrossModelComparison
-    ) -> list[RedFlag]:
+    def _check_similarity_flags(self, comp: CrossModelComparison) -> list[RedFlag]:
         """Check if supposedly different models are actually the same."""
         flags: list[RedFlag] = []
         if comp.verdict == "SAME_MODEL":
@@ -252,14 +317,18 @@ class DeepAnalysisService:
             )
         return flags
 
-    def _determine_verdict(self, flags: list[RedFlag]) -> str:
+    def _determine_verdict(
+        self,
+        flags: list[RedFlag],
+        reports: list[ModelReport],
+    ) -> str:
         """Determine overall fraud verdict from red flags.
 
         Args:
             flags: All detected red flags.
 
         Returns:
-            FRAUD_DETECTED, LEGITIMATE, or INCONCLUSIVE.
+            FRAUD_DETECTED, SUSPICIOUS, NO_FRAUD_SIGNALS, or INCONCLUSIVE.
         """
         high_flags = sum(1 for f in flags if f.severity == "HIGH")
         medium_flags = sum(1 for f in flags if f.severity == "MEDIUM")
@@ -268,9 +337,13 @@ class DeepAnalysisService:
             return "FRAUD_DETECTED"
         if high_flags == 1 and medium_flags >= 1:
             return "FRAUD_DETECTED"
-        if high_flags == 0 and medium_flags == 0:
-            return "LEGITIMATE"
-        return "INCONCLUSIVE"
+        if high_flags >= 1 or medium_flags >= 2:
+            return "SUSPICIOUS"
+        if any(report.evidence_quality != "SUFFICIENT" for report in reports):
+            return "INCONCLUSIVE"
+        if medium_flags == 1:
+            return "SUSPICIOUS"
+        return "NO_FRAUD_SIGNALS"
 
     def _build_summary(
         self,
@@ -295,6 +368,7 @@ class DeepAnalysisService:
         for report in reports:
             lines.append(f"• {report.model_name} ({report.provider})")
             lines.append(f"  Probes: {report.total_probes}, Errors: {report.errors}")
+            lines.append(f"  Evidence quality: {report.evidence_quality}")
             lines.append(f"  Avg latency: {report.avg_latency_ms:.0f}ms")
             if report.identity_claims:
                 lines.append(f"  Identity claims: {', '.join(report.identity_claims[:3])}")
@@ -313,7 +387,7 @@ class DeepAnalysisService:
 # ---------------------------------------------------------------------------
 
 
-def _extract_identity_claims(results: list) -> list[str]:
+def _extract_identity_claims(results: list[BenchmarkResult]) -> list[str]:
     """Extract model identity claims from response texts.
 
     Args:
@@ -326,12 +400,17 @@ def _extract_identity_claims(results: list) -> list[str]:
     for r in results:
         if not r.response_text or r.prompt_category != "identity":
             continue
-        matches = _MODEL_NAME_PATTERN.findall(r.response_text)
-        claims.update(m.strip().lower() for m in matches)
+        for pattern in _IDENTITY_CLAIM_PATTERNS:
+            for match in pattern.finditer(r.response_text):
+                prefix = r.response_text[max(0, match.start() - 20) : match.start()]
+                if _NEGATED_IDENTITY_PATTERN.search(prefix):
+                    continue
+                model_name = match.group(1)
+                claims.add(model_name.strip().lower().rstrip(".-"))
     return sorted(claims)
 
 
-def _extract_knowledge_cutoffs(results: list) -> list[str]:
+def _extract_knowledge_cutoffs(results: list[BenchmarkResult]) -> list[str]:
     """Extract knowledge cutoff dates from response texts.
 
     Args:
@@ -345,11 +424,38 @@ def _extract_knowledge_cutoffs(results: list) -> list[str]:
         if not r.response_text:
             continue
         matches = _CUTOFF_PATTERN.findall(r.response_text)
-        cutoffs.extend(m.strip() for m in matches)
+        cutoffs.extend(m.strip().lower() for m in matches)
     return cutoffs
 
 
-def _fingerprint_similarity(fp_a: dict, fp_b: dict) -> float:
+def _extract_proxy_indicators(results: list[BenchmarkResult]) -> list[str]:
+    """Extract short, deduplicated excerpts containing proxy-related terms."""
+    excerpts: set[str] = set()
+    for result in results:
+        text = result.response_text
+        if not text:
+            continue
+        for match in _PROXY_PATTERN.finditer(text):
+            start = max(0, match.start() - 50)
+            end = min(len(text), match.end() + 50)
+            excerpt = " ".join(text[start:end].split())
+            excerpts.add(excerpt)
+    return sorted(excerpts)
+
+
+def _evidence_quality(
+    successful_probes: int,
+    success_rate: float,
+) -> Literal["SUFFICIENT", "DEGRADED", "INSUFFICIENT"]:
+    """Classify whether enough successful probes exist for a meaningful verdict."""
+    if successful_probes >= MIN_VALID_PROBES and success_rate >= MIN_SUCCESS_RATE:
+        return "SUFFICIENT"
+    if successful_probes >= max(3, MIN_VALID_PROBES // 2) and success_rate >= 0.50:
+        return "DEGRADED"
+    return "INSUFFICIENT"
+
+
+def _fingerprint_similarity(fp_a: dict[str, Any], fp_b: dict[str, Any]) -> float:
     """Compute similarity between two fingerprint dicts.
 
     Compares style, vocabulary, and structure dimensions.
@@ -379,7 +485,10 @@ def _fingerprint_similarity(fp_a: dict, fp_b: dict) -> float:
 
 
 def _compare_numeric(
-    fp_a: dict, fp_b: dict, section: str, key: str
+    fp_a: dict[str, Any],
+    fp_b: dict[str, Any],
+    section: str,
+    key: str,
 ) -> float | None:
     """Compare a single numeric metric between two fingerprints.
 
@@ -400,7 +509,7 @@ def _compare_numeric(
     return 1.0 - abs(val_a - val_b) / max_val
 
 
-def _safe_get(fp: dict, section: str, key: str) -> float | None:
+def _safe_get(fp: dict[str, Any], section: str, key: str) -> float | None:
     """Safely retrieve a numeric value from a nested fingerprint dict.
 
     Args:
@@ -435,7 +544,11 @@ def _find_shared_phrases(a: ModelReport, b: ModelReport) -> list[str]:
     return sorted(claims_a & claims_b)
 
 
-def _similarity_verdict(score: float) -> str:
+def _similarity_verdict(
+    score: float,
+    successful_a: int = MIN_VALID_PROBES,
+    successful_b: int = MIN_VALID_PROBES,
+) -> str:
     """Determine if two models are the same based on similarity score.
 
     Args:
@@ -444,7 +557,9 @@ def _similarity_verdict(score: float) -> str:
     Returns:
         SAME_MODEL, DIFFERENT_MODELS, or INCONCLUSIVE.
     """
-    if score >= 0.85:
+    if min(successful_a, successful_b) < MIN_VALID_PROBES:
+        return "INCONCLUSIVE"
+    if score >= 0.90:
         return "SAME_MODEL"
     if score <= 0.50:
         return "DIFFERENT_MODELS"
@@ -461,11 +576,56 @@ def _names_match(requested: str, claimed: str) -> bool:
     Returns:
         True if names are a reasonable match.
     """
-    requested = requested.replace("-", " ").replace("_", " ")
-    claimed = claimed.replace("-", " ").replace("_", " ")
+    req_family = _model_family(requested)
+    claim_family = _model_family(claimed)
+    if req_family and claim_family and req_family != claim_family:
+        return False
 
-    req_parts = set(requested.split())
-    claim_parts = set(claimed.split())
+    req_version = _model_version(requested)
+    claim_version = _model_version(claimed)
+    if req_version and claim_version:
+        if req_version[0] != claim_version[0]:
+            return False
+        if (
+            req_version[1] is not None
+            and claim_version[1] is not None
+            and req_version[1] != claim_version[1]
+        ):
+            return False
 
-    # Check if at least the base name overlaps (e.g., "claude" in both)
-    return bool(req_parts & claim_parts)
+    if req_family and claim_family:
+        return True
+
+    requested_parts = set(_normalize_model_name(requested).split())
+    claimed_parts = set(_normalize_model_name(claimed).split())
+    return bool(requested_parts & claimed_parts)
+
+
+def _normalize_model_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", name.lower()).strip()
+
+
+def _model_family(name: str) -> str | None:
+    normalized = _normalize_model_name(name)
+    aliases = {
+        "claude": {"claude", "opus", "sonnet", "haiku"},
+        "gpt": {"gpt", "chatgpt", "o1", "o3", "o4"},
+        "gemini": {"gemini"},
+        "llama": {"llama"},
+        "mistral": {"mistral", "mixtral"},
+        "kimi": {"kimi"},
+        "command": {"command"},
+    }
+    tokens = set(normalized.split())
+    for family, names in aliases.items():
+        if tokens & names:
+            return family
+    return None
+
+
+def _model_version(name: str) -> tuple[int, int | None] | None:
+    normalized = name.lower().replace("_", "-")
+    match = re.search(r"(?<!\d)(\d+)(?:[.\-](\d+))?", normalized)
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)) if match.group(2) else None

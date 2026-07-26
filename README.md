@@ -4,7 +4,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Detect fake AI APIs** — Verify if an LLM API is actually serving the model it claims. Catch resellers who sell you "Claude" or "ChatGPT" but secretly serve Kimi, LLaMA, or other cheaper models behind a system prompt.
+> **Find fake AI API signals** — Test whether an LLM API behaves consistently with the
+> model it claims to serve. The verifier fails closed when evidence is missing: failed
+> probes never produce a clean verdict.
 
 ## The Problem
 
@@ -38,6 +40,7 @@ cp .env.example .env
 
 # 4. Run the API server
 uvicorn src.main:app --reload
+# or: benchmarker serve --reload
 
 # 5. Run tests
 pytest
@@ -69,7 +72,9 @@ If you have a real API key from the official provider (e.g., Anthropic, OpenAI):
 
 ### Option B: Without a Real API Key (Suspect-Only Analysis)
 
-**You don't need an official API key to detect fraud.** The suspect API alone reveals plenty:
+**You don't need an official API key to surface fraud signals.** A suspect-only analysis
+can find contradictions, evasions, proxy disclosures, and suspicious similarities. It
+cannot cryptographically prove model identity.
 
 1. **Configure only the suspect API** in your `.env`:
 
@@ -209,11 +214,25 @@ curl -X POST http://localhost:8000/api/v1/analysis/deep \
 
 ### Verdict Logic
 
-| Verdict            | Condition                            |
-| ------------------ | ------------------------------------ |
-| **FRAUD_DETECTED** | 2+ HIGH flags, or 1 HIGH + 1 MEDIUM  |
-| **INCONCLUSIVE**   | Some flags but insufficient evidence |
-| **LEGITIMATE**     | No HIGH or MEDIUM flags detected     |
+| Verdict              | Meaning                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| **FRAUD_DETECTED**   | Multiple strong, independent fraud signals                            |
+| **SUSPICIOUS**       | At least one meaningful anomaly that requires investigation           |
+| **INCONCLUSIVE**     | Too few successful probes or insufficient comparable evidence         |
+| **NO_FRAUD_SIGNALS** | Required probes succeeded and no configured detector fired            |
+
+`NO_FRAUD_SIGNALS` deliberately does **not** mean “verified legitimate.” Behavioral
+fingerprinting is probabilistic, and a sophisticated proxy can imitate reported identity
+and style. For the strongest result, collect a trusted official baseline under the same
+prompt suite and compare it with the suspect run.
+
+### Fail-Closed Evidence Rules
+
+- At least 8 successful probes and an 80% success rate are required for sufficient evidence.
+- A suspect endpoint cannot earn `MATCH` by timing out or refusing difficult prompts.
+- Cross-run comparisons require identical prompt sets.
+- Model family and version contradictions are treated separately.
+- Proxy and relay disclosures are included in the report.
 
 ## Project Structure
 

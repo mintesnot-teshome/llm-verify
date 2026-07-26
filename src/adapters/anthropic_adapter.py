@@ -1,6 +1,7 @@
 """Anthropic adapter — talks to the Anthropic Messages API."""
 
 import time
+from typing import Any
 
 import httpx
 
@@ -70,9 +71,9 @@ class AnthropicAdapter(ModelAdapter):
             )
 
 
-def _build_payload(model: str, prompt: str, system_prompt: str) -> dict:
+def _build_payload(model: str, prompt: str, system_prompt: str) -> dict[str, Any]:
     """Build the Anthropic Messages API payload."""
-    payload: dict = {
+    payload: dict[str, Any] = {
         "model": model,
         "max_tokens": 4096,
         "messages": [{"role": "user", "content": prompt}],
@@ -82,12 +83,10 @@ def _build_payload(model: str, prompt: str, system_prompt: str) -> dict:
     return payload
 
 
-def _parse_anthropic_response(data: dict, latency_ms: float) -> CompletionResponse:
+def _parse_anthropic_response(data: dict[str, Any], latency_ms: float) -> CompletionResponse:
     """Parse an Anthropic Messages API response."""
     content_blocks = data.get("content", [])
-    text = "".join(
-        block.get("text", "") for block in content_blocks if block.get("type") == "text"
-    )
+    text = "".join(block.get("text", "") for block in content_blocks if block.get("type") == "text")
     usage = data.get("usage", {})
 
     return CompletionResponse(

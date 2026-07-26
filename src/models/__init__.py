@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models."""
 
-from src.models.benchmark import BenchmarkRun  # noqa: F401
-from src.models.result import BenchmarkResult  # noqa: F401
+from src.models.benchmark import BenchmarkRun
+from src.models.result import BenchmarkResult
 
-__all__ = ["BenchmarkRun", "BenchmarkResult"]
+__all__ = ["BenchmarkResult", "BenchmarkRun"]

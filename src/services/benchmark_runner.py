@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.adapters.base import CompletionResponse, ModelAdapter
 from src.adapters.factory import create_adapter
+from src.models.benchmark import BenchmarkRun
 from src.prompts import PROMPT_SUITES
 from src.repositories.benchmark_repo import BenchmarkRepository
 from src.repositories.result_repo import ResultRepository
@@ -75,39 +76,50 @@ class BenchmarkRunnerService:
             Total number of results stored.
         """
         semaphore = asyncio.Semaphore(self._max_concurrent)
-        tasks: list[asyncio.Task[None]] = []
+        tasks: list[asyncio.Task[tuple[ModelConfig, dict[str, str], CompletionResponse]]] = []
+        adapters: list[ModelAdapter] = []
 
         for config in model_configs:
             adapter = create_adapter(config)
+            adapters.append(adapter)
             for prompt in prompts:
-                task = asyncio.create_task(
-                    self._execute_single(semaphore, run_id, adapter, config, prompt)
-                )
+                task = asyncio.create_task(self._execute_single(semaphore, adapter, config, prompt))
                 tasks.append(task)
 
-        await asyncio.gather(*tasks, return_exceptions=True)
-        return len(tasks)
+        try:
+            completed = await asyncio.gather(*tasks)
+        finally:
+            await asyncio.gather(
+                *(adapter.close() for adapter in adapters),
+                return_exceptions=True,
+            )
+
+        # AsyncSession is not safe for concurrent writes. Network work runs
+        # concurrently above; persistence is intentionally serialized here.
+        stored_count = 0
+        for config, prompt, response in completed:
+            await self._store_result(run_id, config, prompt, response)
+            stored_count += 1
+        return stored_count
 
     async def _execute_single(
         self,
         semaphore: asyncio.Semaphore,
-        run_id: str,
         adapter: ModelAdapter,
         config: ModelConfig,
         prompt: dict[str, str],
-    ) -> None:
+    ) -> tuple[ModelConfig, dict[str, str], CompletionResponse]:
         """Execute a single prompt against a single model.
 
         Args:
             semaphore: Concurrency limiter.
-            run_id: The parent benchmark run ID.
             adapter: The model adapter to use.
             config: Model configuration.
             prompt: Prompt dictionary with 'category' and 'text'.
         """
         async with semaphore:
             response = await self._safe_complete(adapter, prompt["text"])
-            await self._store_result(run_id, config, prompt, response)
+            return config, prompt, response
 
     async def _safe_complete(
         self,
@@ -159,7 +171,7 @@ class BenchmarkRunnerService:
             total_tokens=response.total_tokens,
         )
 
-    def _build_response(self, run: object, result_count: int) -> BenchmarkRunResponse:
+    def _build_response(self, run: BenchmarkRun, result_count: int) -> BenchmarkRunResponse:
         """Build a BenchmarkRunResponse from a BenchmarkRun ORM object.
 
         Args:
@@ -171,13 +183,13 @@ class BenchmarkRunnerService:
         """
         return BenchmarkRunResponse.model_validate(
             {
-                "id": getattr(run, "id"),
-                "name": getattr(run, "name"),
-                "description": getattr(run, "description"),
-                "status": getattr(run, "status"),
-                "prompt_suite": getattr(run, "prompt_suite"),
-                "created_at": getattr(run, "created_at"),
-                "completed_at": getattr(run, "completed_at"),
+                "id": run.id,
+                "name": run.name,
+                "description": run.description,
+                "status": run.status,
+                "prompt_suite": run.prompt_suite,
+                "created_at": run.created_at,
+                "completed_at": run.completed_at,
                 "result_count": result_count,
             }
         )

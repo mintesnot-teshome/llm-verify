@@ -1,5 +1,7 @@
 """Results & comparison API handlers."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,8 +17,8 @@ router = APIRouter(prefix="/results", tags=["results"])
 @router.get("/{run_id}", response_model=list[BenchmarkResultResponse])
 async def get_results(
     run_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
     model_name: str | None = None,
-    session: AsyncSession = Depends(get_session),
 ) -> list[BenchmarkResultResponse]:
     """Get all results for a benchmark run, optionally filtered by model.
 
@@ -44,7 +46,7 @@ async def get_results(
 @router.post("/compare", response_model=ComparisonScore)
 async def compare_runs(
     request: ComparisonRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ComparisonScore:
     """Compare two benchmark runs to detect model identity.
 
@@ -58,8 +60,8 @@ async def compare_runs(
 @router.get("/{run_id}/fingerprint")
 async def get_fingerprint(
     run_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
     model_name: str | None = None,
-    session: AsyncSession = Depends(get_session),
 ) -> dict[str, object]:
     """Generate a behavioral fingerprint for a model from a benchmark run.
 

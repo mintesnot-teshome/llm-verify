@@ -20,7 +20,7 @@ async def test_run_benchmark_creates_run_and_stores_results(db_session):
         latency_ms=150.0,
     )
 
-    with patch("src.adapters.factory.create_adapter") as mock_factory:
+    with patch("src.services.benchmark_runner.create_adapter") as mock_factory:
         mock_adapter = AsyncMock()
         mock_adapter.complete.return_value = mock_response
         mock_factory.return_value = mock_adapter
@@ -46,6 +46,7 @@ async def test_run_benchmark_creates_run_and_stores_results(db_session):
         assert result.name == "Test Run"
         assert result.status == "completed"
         assert result.result_count > 0
+        mock_adapter.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -56,7 +57,7 @@ async def test_run_benchmark_handles_adapter_error(db_session):
         error="Connection timeout",
     )
 
-    with patch("src.adapters.factory.create_adapter") as mock_factory:
+    with patch("src.services.benchmark_runner.create_adapter") as mock_factory:
         mock_adapter = AsyncMock()
         mock_adapter.complete.return_value = mock_response
         mock_factory.return_value = mock_adapter
@@ -80,6 +81,7 @@ async def test_run_benchmark_handles_adapter_error(db_session):
 
         assert result.status == "completed"
         assert result.result_count > 0
+        mock_adapter.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

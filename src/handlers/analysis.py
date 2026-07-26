@@ -1,5 +1,7 @@
 """Deep analysis API handler — run full fraud detection analysis."""
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +15,7 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 @router.post("/deep", response_model=DeepAnalysisReport)
 async def run_deep_analysis(
     request: DeepAnalysisRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DeepAnalysisReport:
     """Run a comprehensive deep analysis against suspect model endpoints.
 

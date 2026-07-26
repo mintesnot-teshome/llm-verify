@@ -1,16 +1,16 @@
 """Pydantic request/response schemas."""
 
-from src.schemas.benchmark import (  # noqa: F401
+from src.schemas.benchmark import (
     BenchmarkRunCreate,
     BenchmarkRunResponse,
     BenchmarkRunStatus,
 )
-from src.schemas.result import BenchmarkResultResponse, ModelConfig  # noqa: F401
+from src.schemas.result import BenchmarkResultResponse, ModelConfig
 
 __all__ = [
+    "BenchmarkResultResponse",
     "BenchmarkRunCreate",
     "BenchmarkRunResponse",
     "BenchmarkRunStatus",
-    "BenchmarkResultResponse",
     "ModelConfig",
 ]
