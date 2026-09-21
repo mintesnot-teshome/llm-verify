@@ -58,6 +58,12 @@ _PROXY_PATTERN = re.compile(
     r"proxy|relay|intermediary|managed\s+server|forwarding|middleware",
     re.IGNORECASE,
 )
+_PROXY_DENIAL_PATTERN = re.compile(
+    r"\b(?:do\s+not|don['\u2019]t|does\s+not|doesn['\u2019]t|am\s+not|is\s+not|"
+    r"isn['\u2019]t|without|no)\b[^.!?;]{0,50}"
+    r"\b(?:proxy|relay|intermediary|managed\s+server|forwarding|middleware)\b",
+    re.IGNORECASE,
+)
 
 
 class DeepAnalysisService:
@@ -436,8 +442,24 @@ def _extract_proxy_indicators(results: list[BenchmarkResult]) -> list[str]:
         if not text:
             continue
         for match in _PROXY_PATTERN.finditer(text):
-            start = max(0, match.start() - 50)
-            end = min(len(text), match.end() + 50)
+            sentence_start = max(
+                text.rfind(".", 0, match.start()),
+                text.rfind("!", 0, match.start()),
+                text.rfind("?", 0, match.start()),
+                text.rfind(";", 0, match.start()),
+            ) + 1
+            sentence_ends = [
+                index
+                for delimiter in ".!?;"
+                if (index := text.find(delimiter, match.end())) != -1
+            ]
+            sentence_end = min(sentence_ends) if sentence_ends else len(text)
+            sentence = text[sentence_start:sentence_end]
+            if _PROXY_DENIAL_PATTERN.search(sentence):
+                continue
+
+            start = max(sentence_start, match.start() - 50)
+            end = min(sentence_end, match.end() + 50)
             excerpt = " ".join(text[start:end].split())
             excerpts.add(excerpt)
     return sorted(excerpts)

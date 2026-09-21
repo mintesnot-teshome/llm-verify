@@ -122,3 +122,34 @@ async def test_compare_fails_closed_with_too_few_results(db_session):
 
     assert score.verdict == "INCONCLUSIVE"
     assert "at least 8" in score.details
+
+
+@pytest.mark.asyncio
+async def test_compare_requires_model_selector_for_multi_model_run(db_session):
+    """Results from different models must never be blended into one score."""
+    from src.repositories.benchmark_repo import BenchmarkRepository
+
+    bench_repo = BenchmarkRepository(db_session)
+    result_repo = ResultRepository(db_session)
+    baseline = await bench_repo.create("Baseline", "", "identity")
+    suspect = await bench_repo.create("Suspect", "", "identity")
+
+    await _create_results(result_repo, baseline.id, "gpt-4o")
+    await _create_results(result_repo, baseline.id, "gpt-4.1")
+    await _create_results(result_repo, suspect.id, "suspect")
+
+    comparator = ModelComparatorService(db_session)
+    ambiguous = await comparator.compare(
+        ComparisonRequest(baseline_run_id=baseline.id, suspect_run_id=suspect.id)
+    )
+    selected = await comparator.compare(
+        ComparisonRequest(
+            baseline_run_id=baseline.id,
+            baseline_model_name="gpt-4o",
+            suspect_run_id=suspect.id,
+        )
+    )
+
+    assert ambiguous.verdict == "INCONCLUSIVE"
+    assert "baseline_model_name" in ambiguous.details
+    assert selected.verdict == "MATCH"

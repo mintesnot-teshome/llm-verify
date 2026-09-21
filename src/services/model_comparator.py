@@ -30,8 +30,21 @@ class ModelComparatorService:
         Returns:
             ComparisonScore with overall similarity and per-dimension breakdown.
         """
-        baseline = await self._result_repo.get_by_run_id(request.baseline_run_id)
-        suspect = await self._result_repo.get_by_run_id(request.suspect_run_id)
+        baseline, baseline_issue = await self._load_scoped_results(
+            request.baseline_run_id,
+            request.baseline_model_name,
+            "baseline",
+        )
+        if baseline_issue:
+            return self._inconclusive(request, baseline_issue)
+
+        suspect, suspect_issue = await self._load_scoped_results(
+            request.suspect_run_id,
+            request.suspect_model_name,
+            "suspect",
+        )
+        if suspect_issue:
+            return self._inconclusive(request, suspect_issue)
 
         evidence_issue = _comparison_evidence_issue(baseline, suspect)
         if evidence_issue:
@@ -59,6 +72,30 @@ class ModelComparatorService:
             verdict=verdict,
             details=self._build_details(dimensions, verdict),
         )
+
+    async def _load_scoped_results(
+        self,
+        run_id: str,
+        model_name: str | None,
+        label: str,
+    ) -> tuple[list[BenchmarkResult], str | None]:
+        """Load one model's results and reject ambiguous multi-model runs."""
+        if model_name:
+            results = await self._result_repo.get_by_run_and_model(run_id, model_name)
+            if not results:
+                return [], f"The {label} run has no results for model {model_name!r}."
+            return results, None
+
+        results = await self._result_repo.get_by_run_id(run_id)
+        model_names = sorted({result.model_name for result in results})
+        if len(model_names) > 1:
+            selector = f"{label}_model_name"
+            return (
+                [],
+                f"The {label} run contains multiple models ({', '.join(model_names)}); "
+                f"provide {selector}.",
+            )
+        return results, None
 
     def _compute_dimensions(
         self,

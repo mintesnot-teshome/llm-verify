@@ -65,6 +65,7 @@ class BenchmarkRepository:
         """
         stmt = (
             select(BenchmarkRun)
+            .options(selectinload(BenchmarkRun.results))
             .order_by(BenchmarkRun.created_at.desc())
             .limit(limit)
             .offset(offset)

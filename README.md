@@ -36,7 +36,7 @@ pip install -e ".[dev]"
 
 # 3. Copy environment config
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env: set API_ACCESS_KEY and your provider keys
 
 # 4. Run the API server
 uvicorn src.main:app --reload
@@ -45,6 +45,16 @@ uvicorn src.main:app --reload
 # 5. Run tests
 pytest
 ```
+
+All `/api/v1` routes require `Authorization: Bearer <API_ACCESS_KEY>` by default.
+For isolated local development only, you can set `ALLOW_UNAUTHENTICATED=true`.
+Custom/suspect endpoint hostnames must be listed exactly in `ALLOWED_API_HOSTS`
+(comma-separated); the configured `SUSPECT_API_BASE_URL` host is trusted automatically.
+Official OpenAI and Anthropic API hosts are built in.
+
+When comparing or fingerprinting a run containing multiple models, specify the
+corresponding model selector (`baseline_model_name`, `suspect_model_name`, or the
+`model_name` query parameter). The API rejects ambiguous aggregate fingerprints.
 
 ## API Endpoints
 
@@ -87,6 +97,7 @@ cannot cryptographically prove model identity.
 
    ```bash
    curl -X POST http://localhost:8000/api/v1/benchmarks/ \
+     -H "Authorization: Bearer $API_ACCESS_KEY" \
      -H "Content-Type: application/json" \
      -d '{
        "name": "Suspect Identity Test",
@@ -101,7 +112,8 @@ cannot cryptographically prove model identity.
 
 4. **Get the fingerprint** to see behavioral patterns:
    ```bash
-   curl http://localhost:8000/api/v1/results/{run_id}/fingerprint?model_name=claude-sonnet-4-20250514
+   curl -H "Authorization: Bearer $API_ACCESS_KEY" \
+     "http://localhost:8000/api/v1/results/{run_id}/fingerprint?model_name=claude-sonnet-4-20250514"
    ```
 
 #### What to Look For (No Baseline Needed)
@@ -159,6 +171,7 @@ Instead of running individual benchmark suites and manually comparing results, *
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/analysis/deep \
+  -H "Authorization: Bearer $API_ACCESS_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Investigate opuscode.pro",

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     suspect_api_base_url: str = ""
 
     # ── Application ──
+    api_access_key: str = ""
+    allow_unauthenticated: bool = False
+    api_requests_per_minute: int = 60
+    allowed_api_hosts: str = ""
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     benchmark_timeout: int = 30
     max_concurrent_calls: int = 5
@@ -34,6 +38,15 @@ class Settings(BaseSettings):
         """Extract the file path from the SQLite URL."""
         raw = self.database_url.replace("sqlite+aiosqlite:///", "")
         return Path(raw)
+
+    @property
+    def outbound_api_hosts(self) -> set[str]:
+        """Return explicitly trusted outbound API hostnames."""
+        return {
+            host.strip().lower().rstrip(".")
+            for host in self.allowed_api_hosts.split(",")
+            if host.strip()
+        }
 
 
 def get_settings() -> Settings:

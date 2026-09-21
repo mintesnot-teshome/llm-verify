@@ -53,7 +53,7 @@ async def list_benchmarks(
             prompt_suite=PromptSuite(run.prompt_suite),
             created_at=run.created_at,
             completed_at=run.completed_at,
-            result_count=len(run.results) if hasattr(run, "results") and run.results else 0,
+            result_count=len(run.results),
         )
         for run in runs
     ]

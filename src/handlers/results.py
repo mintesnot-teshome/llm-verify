@@ -67,7 +67,7 @@ async def get_fingerprint(
 
     Args:
         run_id: The benchmark run ID.
-        model_name: Optional model name (uses first model found if omitted).
+        model_name: Optional model name; required when a run contains multiple models.
         session: Database session.
     """
     repo = ResultRepository(session)
@@ -76,6 +76,15 @@ async def get_fingerprint(
         results = await repo.get_by_run_and_model(run_id, model_name)
     else:
         results = await repo.get_by_run_id(run_id)
+        model_names = sorted({result.model_name for result in results})
+        if len(model_names) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This run contains multiple models; provide the model_name query parameter. "
+                    f"Available models: {', '.join(model_names)}"
+                ),
+            )
 
     if not results:
         raise HTTPException(

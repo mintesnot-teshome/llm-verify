@@ -5,12 +5,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from src.database import init_db
 from src.handlers.analysis import router as analysis_router
 from src.handlers.benchmarks import router as benchmarks_router
 from src.handlers.results import router as results_router
+from src.security import require_api_access
 
 
 def _configure_logging() -> None:
@@ -44,9 +45,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(analysis_router, prefix="/api/v1")
-app.include_router(benchmarks_router, prefix="/api/v1")
-app.include_router(results_router, prefix="/api/v1")
+protected = [Depends(require_api_access)]
+app.include_router(analysis_router, prefix="/api/v1", dependencies=protected)
+app.include_router(benchmarks_router, prefix="/api/v1", dependencies=protected)
+app.include_router(results_router, prefix="/api/v1", dependencies=protected)
 
 
 @app.get("/health")

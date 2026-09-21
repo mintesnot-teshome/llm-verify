@@ -6,6 +6,7 @@ from src.adapters.generic_adapter import GenericAdapter
 from src.adapters.openai_adapter import OpenAIAdapter
 from src.config import get_settings
 from src.schemas.result import ModelConfig
+from src.security import validate_outbound_api_url
 
 _ADAPTER_MAP: dict[str, type[ModelAdapter]] = {
     "openai": OpenAIAdapter,
@@ -44,6 +45,8 @@ def create_adapter(config: ModelConfig, timeout: int | None = None) -> ModelAdap
     settings = get_settings()
     api_key = _resolve_api_key(config, settings)
     api_base_url = _resolve_base_url(config, settings)
+    if api_base_url:
+        validate_outbound_api_url(api_base_url, settings)
     effective_timeout = timeout or settings.benchmark_timeout
 
     return adapter_cls(

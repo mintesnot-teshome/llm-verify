@@ -49,6 +49,14 @@ class ComparisonRequest(BaseModel):
 
     baseline_run_id: str = Field(..., description="ID of the trusted baseline run")
     suspect_run_id: str = Field(..., description="ID of the suspect run to compare")
+    baseline_model_name: str | None = Field(
+        default=None,
+        description="Model to select when the baseline run contains multiple models",
+    )
+    suspect_model_name: str | None = Field(
+        default=None,
+        description="Model to select when the suspect run contains multiple models",
+    )
 
 
 class ComparisonScore(BaseModel):

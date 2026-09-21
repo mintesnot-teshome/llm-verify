@@ -51,6 +51,7 @@ class ModelAdapter(ABC):
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout),
                 headers=self._build_headers(),
+                follow_redirects=False,
             )
         return self._client
 

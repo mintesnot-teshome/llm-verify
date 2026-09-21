@@ -99,6 +99,15 @@ def test_proxy_disclosures_are_extracted() -> None:
     assert "proxy" in indicators[0]
 
 
+def test_proxy_denials_are_not_flagged() -> None:
+    results = [
+        SimpleNamespace(
+            response_text="I do not use a proxy or relay; requests go directly to the provider."
+        )
+    ]
+    assert _extract_proxy_indicators(results) == []
+
+
 def test_evidence_quality_thresholds() -> None:
     assert _evidence_quality(8, 0.80) == "SUFFICIENT"
     assert _evidence_quality(4, 0.60) == "DEGRADED"
